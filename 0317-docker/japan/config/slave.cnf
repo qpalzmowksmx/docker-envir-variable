@@ -1,0 +1,15 @@
+[mysqld]
+server-id = 3
+relay-log = mysql-relay-bin
+binlog_format = ROW
+sync_binlog = 1
+innodb_flush_log_at_trx_commit = 1
+max_connections = 200
+bind-address = 0.0.0.0
+skip-name-resolve
+
+# 복제 관련 설정
+gtid_mode = ON
+enforce_gtid_consistency = ON
+log_slave_updates = ON
+read_only = ON

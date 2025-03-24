@@ -1,0 +1,61 @@
+tree-ls
+
+docker-compose.yml--0
+
+config/
+      /master-exporter.cnf
+      /master.cnf
+      /old-orche.json
+      /orchestrator.conf.json
+      /prometheus/
+      /proxysql.cnf
+      /slave1-exporter.cnf
+      /slave1.cnf
+data
+    / 필요없음
+grafana
+       / 필요없음
+
+init
+    /master.sql
+    /slave.sql
+
+prometheus
+          /
+          prometheus.yml
+
+기타 백업용 덤프 파일들
+
+master_data_dump-2.sql # 이게 최신버전
+master_data_dump.sql
+mysql-master-data
+mysql-slave1-data
+0228data.sql
+0310-2nd-data.sql
+0310data.sql
+
+
+##############################################################################################################
+/data/mysql_master/
+[root@ip-100-100-21-56 mysql_master]# ls
+'#ib_16384_0.dblwr'   auto.cnf          client-key.pem   ibtmp1             mysql-bin.000003   mysql-bin.000007   mysql.ibd            private_key.pem   sys
+'#ib_16384_1.dblwr'   ca-key.pem        flight_data      mysql              mysql-bin.000004   mysql-bin.000008   mysql.sock           public_key.pem    undo_001
+'#innodb_redo'        ca.pem            ib_buffer_pool   mysql-bin.000001   mysql-bin.000005   mysql-bin.000009   orchestrator         server-cert.pem   undo_002
+'#innodb_temp'        client-cert.pem   ibdata1          mysql-bin.000002   mysql-bin.000006   mysql-bin.index    performance_schema   server-key.pem
+##############################################################################################################
+권한 확인
+[root@ip-100-100-21-56 docker-files]# ls -l
+total 20492
+-rw-r--r--. 1 root        root        4822184 Feb 28 06:32 0228data.sql
+-rw-r--r--. 1 root        root        5380045 Mar 10 03:31 0310-2nd-data.sql
+-rw-r--r--. 1 root        root        5379409 Mar 10 02:57 0310data.sql
+drw-r--r--. 3 root        root            186 Mar 13 09:45 config
+drwxrwxrwx. 6 root        root             81 Mar 10 02:07 data # 필요없음
+-rw-r--r--. 1 root        root           7377 Mar 10 08:19 docker-compose.yml
+drw-r--r--. 3 root        root             24 Mar  8 14:08 grafana # 필요없음
+drw-r--r--. 2 root        root             42 Mar  9 14:29 init
+-rw-r--r--. 1 root        root        5380735 Mar 12 07:00 master_data_dump-2.sql
+-rw-r--r--. 1 root        root             52 Mar 12 01:36 master_data_dump.sql
+drwx------. 2 systemd-oom systemd-oom       6 Mar  8 14:19 mysql-master-data
+drwx------. 2 systemd-oom systemd-oom       6 Mar  8 14:19 mysql-slave1-data
+drw-r--r--. 3 root        root             40 Mar  8 14:08 prometheus

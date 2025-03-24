@@ -1,0 +1,240 @@
+services:
+  # MySQL Master
+  mysql-master:
+    image: mysql:8.0.41
+    container_name: mysql-master
+    command: --default-authentication-plugin=mysql_native_password --gtid_mode=ON --enforce-gtid-consistency=ON
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: flight_data
+      MYSQL_USER: flaskuser
+      MYSQL_PASSWORD: ${MYSQL_FLA_PASSWORD}
+      MYSQL_REPLICATION_USER: repl_user
+      MYSQL_REPLICATION_PASSWORD: ${MYSQL_REPL_PASSWORD}
+    volumes:
+      - /home/ec2-user/docker-files/config/master.cnf:/etc/mysql/conf.d/master.cnf
+      - /home/ec2-user/docker-files/data/mysql_master:/var/lib/mysql
+      - /home/ec2-user/docker-files/init/master.sql:/docker-entrypoint-initdb.d/master.sql
+      # - /home/ec2-user/docker-files/0228data.sql:/docker-dumps
+      - /home/ec2-user/docker-files/0310data.sql:/docker-entrypoint-initdb.d/0310data.sql
+    networks:
+      app_network:
+        ipv4_address: 172.18.0.2
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MySQL Slave
+  mysql-slave1:
+    image: mysql:8.0.41
+    container_name: mysql-slave1
+    command: --default-authentication-plugin=mysql_native_password
+    ports:
+      - "3310:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: flight_data
+      MYSQL_USER: flaskuser
+      MYSQL_PASSWORD: ${MYSQL_FLASK_PASSWORD}
+      MYSQL_REPLICATION_USER: repl_user
+      MYSQL_REPLICATION_PASSWORD: ${MYSQL_REPL_PASSWORD}
+      MYSQL_MASTER_HOST: mysql-master
+      MYSQL_MASTER_PORT: 3306
+    volumes:
+      - /home/ec2-user/docker-files/config/slave1.cnf:/etc/mysql/conf.d/slave.cnf
+      - /home/ec2-user/docker-files/data/mysql_slave1:/var/lib/mysql
+      - /home/ec2-user/docker-files/init/slave1.sql:/docker-entrypoint-initdb.d/slave1.sql
+      # - /home/ec2-user/docker-files/0228data.sql:/docker-dumps
+      - /home/ec2-user/docker-files/0310data.sql:/docker-entrypoint-initdb.d/0310data.sql
+    networks:
+      app_network:
+        ipv4_address: 172.18.0.3
+    depends_on:
+      mysql-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ProxySQL
+  proxysql:
+    image: proxysql/proxysql:2.7.2
+    container_name: proxysql
+    ports:
+      - "6033:6033" # ProxySQL 클라이언트 포트
+      - "6032:6032" # ProxySQL Admin 포트
+    volumes:
+      - /home/ec2-user/docker-files/config/proxysql.cnf:/etc/proxysql.cnf:ro
+      - /home/ec2-user/docker-files/data/proxysql:/var/lib/proxysql
+    networks:
+      app_network:
+        ipv4_address: 172.18.0.29
+    depends_on:
+      mysql-master:
+        condition: service_healthy
+      mysql-slave1:
+        condition: service_healthy
+
+  # MySQL Exporter - Master
+  mysqld-exporter-master:
+    image: quay.io/prometheus/mysqld-exporter:latest
+    container_name: mysqld-exporter-master
+    restart: unless-stopped
+    command:
+      - '--config.my-cnf=/etc/mysqld_exporter/my.cnf'
+      - '--web.listen-address=:9104'
+      - '--collect.info_schema.tables'
+      - '--collect.info_schema.innodb_metrics'
+      - '--collect.global_status'
+      - '--collect.global_variables'
+      - '--collect.slave_status'
+      - '--collect.info_schema.processlist'
+      - '--collect.perf_schema.tablelocks'
+      - '--collect.perf_schema.file_events'
+    volumes:
+      - /home/ec2-user/docker-files/config/master-exporter.cnf:/etc/mysqld_exporter/my.cnf:ro
+    ports:
+      - "9104:9104"
+    depends_on:
+      - mysql-master
+    networks:
+      app_network:
+        ipv4_address: 172.18.0.5
+
+  # MySQL Exporter - Slave1
+  mysqld-exporter-slave1:
+    image: quay.io/prometheus/mysqld-exporter:latest
+    container_name: mysqld-exporter-slave1
+    restart: unless-stopped
+    command:
+      - '--config.my-cnf=/etc/mysqld_exporter/my.cnf'
+      - '--web.listen-address=:9104'
+      - '--collect.info_schema.tables'
+      - '--collect.info_schema.innodb_metrics'
+      - '--collect.global_status'
+      - '--collect.global_variables'
+      - '--collect.slave_status'
+      - '--collect.info_schema.processlist'
+      - '--collect.perf_schema.tablelocks'
+      - '--collect.perf_schema.file_events'
+    volumes:
+      - /home/ec2-user/docker-files/config/slave1-exporter.cnf:/etc/mysqld_exporter/my.cnf:ro
+    ports:
+      - "9105:9104"
+    depends_on:
+      - mysql-slave1
+    networks:
+      app_network:
+        ipv4_address: 172.18.0.6
+
+  # Node Exporter - Master
+  node-exporter-master:
+    image: quay.io/prometheus/node-exporter:latest
+    container_name: node-exporter-master
+    restart: unless-stopped
+    ports:
+      - "9100:9100"
+    command:
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    networks:
+      app_network:
+        ipv4_address: 172.18.0.7
+
+  # Node Exporter - Slave
+  node-exporter-slave:
+    image: quay.io/prometheus/node-exporter:latest
+    container_name: node-exporter-slave
+    restart: unless-stopped
+    ports:
+      - "9101:9100"
+    command:
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    networks:
+      app_network:
+        ipv4_address: 172.18.0.8
+
+  # Orchestrator
+  orchestrator:
+    image: openarkcode/orchestrator:latest
+    container_name: orchestrator
+    depends_on:
+      - mysql-master
+    environment:
+      # Orchestrator 설정을 위한 환경 변수
+      ORCHESTRATOR_URI: "http://3.37.134.118:3030"
+      # 현재 인스턴스 IP임 매번 수정할것
+    volumes:
+      - /home/ec2-user/docker-files/config/orchestrator.conf.json:/etc/orchestrator.conf.json # Json 기판 구성파일
+    networks:
+      app_network:
+        ipv4_address: 172.18.20.19
+    ports:
+      - "3030:3000"      
+
+  # Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    volumes:
+      - /home/ec2-user/docker-files/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml \    # 디렉토리 전체를 마운트
+      - /home/ec2-user/docker-files/prometheus/data:/prometheus/data:rw,Z
+    ports:
+      - "9090:9090"
+    networks:
+      - app_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      - mysqld-exporter-master
+      - mysqld-exporter-slave1
+      - node-exporter-master
+      - node-exporter-slave
+
+  # Grafana
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${MYSQL_ROOT_PASSWORD}
+    ports:
+      - "3000:3000"
+    volumes:
+      - /home/ec2-user/docker-files/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - grafana-storage:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - app_network
+
+volumes:
+  grafana-storage:
+
+networks:
+  app_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.18.0.0/16

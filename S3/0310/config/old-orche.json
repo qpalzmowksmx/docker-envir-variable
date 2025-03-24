@@ -1,0 +1,17 @@
+{
+    "Debug": true,
+    "MySQLTopologyUser": "orchestrator_user",
+    "MySQLTopologyPassword": "AKJ1passwd",
+    "MySQLTopologyCredentialsConfigFile": "",
+    "MySQLOrchestratorHost": "mysql-master",
+    "MySQLOrchestratorPort": 3306,
+    "MySQLOrchestratorDatabase": "orchestrator",
+    "MySQLOrchestratorUser": "orchestrator_user",
+    "MySQLOrchestratorPassword": "AKJ1passwd",
+    "ListenAddress": ":3000",
+    "HTTPAuthUser": "",
+    "HTTPAuthPassword": "",
+    "AuthenticationMethod": "basic",
+    "EnableSyslog": false,
+    "EnableConsoleLogs": true
+  }

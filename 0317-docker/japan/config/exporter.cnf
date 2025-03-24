@@ -1,0 +1,5 @@
+[client]
+user=exporter
+password=${MYSQL_ROOT_PASSWORD}
+host=mysql-slave-2
+port=3306

@@ -1,0 +1,6 @@
+[client]
+user = flaskuser
+password = AKJ1passwd
+host = mysql-slave1
+port = 3306
+

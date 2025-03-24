@@ -1,0 +1,105 @@
+services:
+  # MySQL Slave2
+  mysql-slave-2:
+    image: mysql:8.0.41
+    container_name: mysql-slave-2
+    command: --default-authentication-plugin=mysql_native_password --gtid_mode=ON --enforce-gtid-consistency=ON
+    ports:
+      - "3307:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: flight_data
+      MYSQL_USER: flaskuser
+      MYSQL_PASSWORD: ${MYSQL_FLA_PASSWORD}
+      MYSQL_REPLICATION_USER: repl_user
+      MYSQL_REPLICATION_PASSWORD: ${MYSQL_REPL_PASSWORD}
+    volumes:
+      - /home/ec2-user/docker-files/master_data_dump-2.sql:/docker-entrypoint-initdb.d/master_data_dump-2.sql
+      - /home/ec2-user/docker-files/config/slave.cnf:/etc/mysql/conf.d/slave.cnf
+      - /home/ec2-user/docker-files/init/slave.sql:/docker-entrypoint-initdb.d/slave.sql
+      - mysql-data:/var/lib/mysql
+    networks:
+      app_network:
+        ipv4_address: 172.18.0.3
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ProxySQL
+  proxysql:
+    image: proxysql/proxysql
+    container_name: proxysql
+    ports:
+      - "6033:6033"  # MySQL Client connections
+      - "6032:6032"  # Admin interface
+    volumes:
+      - /home/ec2-user/docker-files/proxysql/proxysql.cnf:/etc/proxysql.cnf
+    depends_on:
+      - mysql-slave-2
+    networks:
+      app_network:
+        ipv4_address: 172.18.0.4
+
+  # Prometheus
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - /home/ec2-user/docker-files/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    depends_on:
+      - mysqld-exporter
+      - node-exporter
+    networks:
+      - app_network
+
+  # Node Exporter
+  node-exporter:
+    image: prom/node-exporter
+    container_name: node-exporter
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($$|/)'
+    pid: host
+    network_mode: host
+
+  # MySQL Exporter
+  mysqld-exporter:
+    image: quay.io/prometheus/mysqld-exporter:latest
+    container_name: mysqld-exporter
+    restart: unless-stopped
+    command:
+      - '--config.my-cnf=/etc/mysqld_exporter/my.cnf'
+      - '--web.listen-address=:9104'
+      - '--collect.info_schema.tables'
+      - '--collect.info_schema.innodb_metrics'
+      - '--collect.global_status'
+      - '--collect.global_variables'
+      - '--collect.slave_status'
+      - '--collect.info_schema.processlist'
+      - '--collect.perf_schema.tablelocks'
+      - '--collect.perf_schema.file_events'
+    volumes:
+      - /home/ec2-user/docker-files/config/exporter.cnf:/etc/mysqld_exporter/my.cnf:ro
+    depends_on:
+      - mysql-slave-2
+    networks:
+      - app_network  
+
+networks:
+  app_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.18.0.0/16
+
+volumes:
+  mysql-data:  # mysql-data 볼륨 정의 추가
